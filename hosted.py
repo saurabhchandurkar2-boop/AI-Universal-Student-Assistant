@@ -115,7 +115,7 @@ class HostedAIEngine(AIEngine):
                         "Wait a minute and try again.")
             if "API key" in detail or "API_KEY" in detail or "400" in detail or "403" in detail:
                 return "Gemini rejected the key. Check that you pasted it correctly."
-            return "Gemini could not answer right now. Please try again."
+            return ("Gemini could not answer right now (" + detail[:200] + "). Please try again.")
         return answer
 
     def simple_ask(self, system: str, user: str, max_tokens: int = 300) -> str:
