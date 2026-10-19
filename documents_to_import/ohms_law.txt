@@ -1,0 +1,23 @@
+Ohm's Law
+
+Ohm's law describes the relationship between voltage, current, and resistance in an electrical circuit.
+
+The formula is:
+
+V = I × R
+
+Where:
+V = voltage in volts
+I = current in amperes
+R = resistance in ohms
+
+The current can be calculated using:
+
+I = V / R
+
+For example, if a circuit has a voltage of 10 V and a resistance of 5 ohms:
+
+I = 10 / 5
+I = 2 A
+
+Therefore, the current is 2 amperes.

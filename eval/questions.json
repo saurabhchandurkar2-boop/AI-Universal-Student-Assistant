@@ -1,0 +1,77 @@
+[
+  {
+    "q": "What is the formula for Ohm's law?",
+    "source": "ohms_law.txt",
+    "expect": "V = I"
+  },
+  {
+    "q": "How do I calculate current from voltage and resistance?",
+    "source": "ohms_law.txt",
+    "expect": "I = V / R"
+  },
+  {
+    "q": "State Newton's second law",
+    "source": "newtons_laws.txt",
+    "expect": "F = m"
+  },
+  {
+    "q": "What is the law of inertia?",
+    "source": "newtons_laws.txt",
+    "expect": "at rest"
+  },
+  {
+    "q": "Where does photosynthesis take place?",
+    "source": "photosynthesis.txt",
+    "expect": "chloroplast"
+  },
+  {
+    "q": "What is the overall equation of photosynthesis?",
+    "source": "photosynthesis.txt",
+    "expect": "C6H12O6"
+  },
+  {
+    "q": "What does the Calvin cycle do?",
+    "source": "photosynthesis.txt",
+    "expect": "stroma"
+  },
+  {
+    "q": "State the Pythagoras theorem",
+    "source": "pythagoras_theorem.txt",
+    "expect": "hypotenuse"
+  },
+  {
+    "q": "If the sides are 3 and 4, what is the hypotenuse?",
+    "source": "pythagoras_theorem.txt",
+    "expect": "c = 5"
+  },
+  {
+    "q": "When did India become independent?",
+    "source": "indian_independence_movement.txt",
+    "expect": "15 August 1947"
+  },
+  {
+    "q": "What was the Quit India Movement?",
+    "source": "indian_independence_movement.txt",
+    "expect": "Do or Die"
+  },
+  {
+    "q": "When was the Indian National Congress founded?",
+    "source": "indian_independence_movement.txt",
+    "expect": "1885"
+  },
+  {
+    "q": "What is the equation for displacement with constant acceleration?",
+    "source": "kinematics.txt",
+    "expect": "s = u"
+  },
+  {
+    "q": "What is the third equation of motion?",
+    "source": "kinematics.txt",
+    "expect": "v² = u²"
+  },
+  {
+    "q": "A car starts from rest and accelerates at 2 m/s² for 5 seconds. What is the final velocity?",
+    "source": "kinematics.txt",
+    "expect": "10 m/s"
+  }
+]

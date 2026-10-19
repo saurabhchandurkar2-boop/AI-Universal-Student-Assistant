@@ -1,0 +1,23 @@
+Newton's Laws of Motion
+
+Newton's laws of motion describe how forces change the motion of objects.
+
+First Law (Law of Inertia)
+An object stays at rest or moves in a straight line at constant speed unless an unbalanced force acts on it.
+
+Second Law
+The force on an object equals its mass times its acceleration.
+
+The formula is:
+
+F = m × a
+
+Where:
+F = force in newtons
+m = mass in kilograms
+a = acceleration in metres per second squared
+
+For example, a 5 kg object accelerated at 2 m/s² needs a force of 10 N.
+
+Third Law
+For every action there is an equal and opposite reaction.

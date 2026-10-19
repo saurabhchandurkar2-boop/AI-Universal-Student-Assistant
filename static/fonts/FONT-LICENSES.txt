@@ -1,0 +1,10 @@
+Fonts bundled so the app looks the same without internet access.
+
+Inter        - Copyright The Inter Project Authors. SIL Open Font License 1.1.
+               https://github.com/rsms/inter
+Poppins      - Copyright Indian Type Foundry. SIL Open Font License 1.1.
+               https://github.com/itfoundry/Poppins
+
+The files here are Latin and Greek subsets of the original fonts, converted to
+WOFF. Both fonts may be redistributed under the SIL Open Font License 1.1
+(https://openfontlicense.org).

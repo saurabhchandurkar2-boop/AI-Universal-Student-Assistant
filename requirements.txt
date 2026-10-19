@@ -1,0 +1,8 @@
+streamlit>=1.50
+scikit-learn
+numpy
+pandas
+requests
+pypdf
+python-docx
+google-genai>=1.0

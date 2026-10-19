@@ -1,0 +1,29 @@
+Equations of Motion (Kinematics)
+
+The equations of motion describe an object moving with constant acceleration.
+
+Where:
+u = initial velocity in metres per second
+v = final velocity in metres per second
+a = acceleration in metres per second squared
+t = time in seconds
+s = displacement in metres
+
+First equation (final velocity)
+
+v = u + a × t
+
+Second equation (displacement)
+
+s = u × t + ½ × a × t²
+
+Third equation (velocity from displacement)
+
+v² = u² + 2 × a × s
+
+For example, a car starts from rest (u = 0) and accelerates at 2 m/s² for 5 seconds.
+
+v = 0 + 2 × 5 = 10 m/s
+s = 0 × 5 + ½ × 2 × 5² = 25 m
+
+Therefore, the final velocity is 10 m/s and the displacement is 25 m.

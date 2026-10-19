@@ -1,0 +1,4 @@
+# Optional. Only for running the Notes Summarizer WITHOUT llama-server
+# (large download). Not needed for the hosted demo.
+torch
+transformers

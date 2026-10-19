@@ -1,0 +1,33 @@
+# Environments and secrets
+venv/
+.venv/
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Large or generated files
+models/*.gguf
+models/*.pkl
+knowledge/knowledge_index.txt
+knowledge/documents/*
+!knowledge/documents/.gitkeep
+documents_to_import/*
+!documents_to_import/ohms_law.txt
+!documents_to_import/kinematics.txt
+!documents_to_import/newtons_laws.txt
+!documents_to_import/photosynthesis.txt
+!documents_to_import/pythagoras_theorem.txt
+!documents_to_import/indian_independence_movement.txt
+
+# Personal / backup files
+*backup*
+*_before_*
+*.bak*
+project_structure.txt
+requirements-full.txt
+
+*.gguf

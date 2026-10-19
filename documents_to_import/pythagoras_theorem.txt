@@ -1,0 +1,18 @@
+Pythagoras Theorem
+
+In a right-angled triangle, the square of the hypotenuse equals the sum of the squares of the other two sides.
+
+The formula is:
+
+a² + b² = c²
+
+Where:
+a and b = the two shorter sides
+c = the hypotenuse, the side opposite the right angle
+
+For example, if a = 3 and b = 4:
+
+c² = 3² + 4² = 9 + 16 = 25
+c = 5
+
+Therefore, the hypotenuse is 5 units.
