@@ -79,7 +79,7 @@ Uploads: documents_to_import → knowledge/ingest → knowledge/documents → in
 
 ```bash
 git clone https://github.com/saurabhchandurkar2-boop/AI-Universal-Student-Assistant.git
-cd AI_Student_Assistant
+cd AI-Universal-Student-Assistant
 python -m venv venv
 venv\Scripts\activate          # Windows  (Linux/macOS: source venv/bin/activate)
 pip install -r requirements.txt
@@ -111,6 +111,8 @@ streamlit run app.py
 ```
 
 ## Free public demo
+
+**Live demo:** https://ai-universal-student-assistant-9rutqh5gsjhybrramaqgvf.streamlit.app/
 
 You can put a free online demo on Streamlit Community Cloud so anyone can try it
 in a browser, including on a phone. The demo answers with Gemini using each
