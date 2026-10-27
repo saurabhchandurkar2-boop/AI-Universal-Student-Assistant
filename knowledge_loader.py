@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+from chunk_filter import remove_page_index, write_page_index
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 SOURCE_DIR = os.path.join(PROJECT_ROOT, "documents_to_import")
 DOCS_DIR = os.path.join(PROJECT_ROOT, "knowledge", "documents")
@@ -38,9 +40,11 @@ def _docx_to_text(data: bytes) -> str:
     return "\n".join(parts)
 
 
-def _pdf_to_text(data: bytes, progress=None):
-    """Read a PDF page by page. Returns (text, total_pages, pages_with_text).
+def _pdf_pages(data: bytes, progress=None):
+    """Read a PDF page by page. Returns (page_texts, total_pages, pages_with_text).
 
+    page_texts has one entry for every page (empty when a page has no text), so
+    list position + 1 is the real page number.
     progress(done, total) is called after every page, so large PDFs can show
     a progress bar.
     """
@@ -54,7 +58,7 @@ def _pdf_to_text(data: bytes, progress=None):
             raise ValueError("This PDF is password protected.")
 
     total = len(reader.pages)
-    parts, with_text = [], 0
+    texts, with_text = [], 0
     for number, page in enumerate(reader.pages, start=1):
         try:
             text = page.extract_text() or ""
@@ -62,18 +66,27 @@ def _pdf_to_text(data: bytes, progress=None):
             text = ""
         if text.strip():
             with_text += 1
-            parts.append(text)
+        texts.append(text)
         if progress:
             progress(number, total)
-    return "\n\n".join(parts), total, with_text
+    return texts, total, with_text
 
 
-def convert_upload(data: bytes, filename: str, progress=None):
+def _pdf_to_text(data: bytes, progress=None):
+    """Read a PDF page by page. Returns (text, total_pages, pages_with_text)."""
+    texts, total, with_text = _pdf_pages(data, progress)
+    return "\n\n".join(t for t in texts if t.strip()), total, with_text
+
+
+def convert_upload(data: bytes, filename: str, progress=None, page_sink=None):
     """Turn an uploaded file into plain text.
 
     Returns (name, out_name, payload, pages, warning). Raises ValueError for
     unsupported or unreadable files. Used by add_to_knowledge and by the
     hosted per-visitor workspace.
+
+    page_sink: optional list. For a PDF it receives the text of every page, so the
+    caller can save a page index (see chunk_filter.write_page_index).
     """
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED:
@@ -88,8 +101,10 @@ def convert_upload(data: bytes, filename: str, progress=None):
             raise ValueError(f"No readable text found in {filename}.")
         out_name, payload = name + ".txt", text.encode("utf-8")
     elif ext == ".pdf":
-        text, pages, with_text = _pdf_to_text(data, progress)
-        text = text.strip()
+        page_texts, pages, with_text = _pdf_pages(data, progress)
+        if page_sink is not None:
+            page_sink.extend(page_texts)
+        text = "\n\n".join(t for t in page_texts if t.strip()).strip()
         if not text:
             raise ValueError(
                 f"No readable text found in {filename}. "
@@ -115,8 +130,9 @@ def add_to_knowledge(data: bytes, filename: str, progress=None) -> dict:
     Raises ValueError for unsupported or unreadable files.
     """
     os.makedirs(SOURCE_DIR, exist_ok=True)
+    page_texts = []
     name, out_name, payload, pages, warning = convert_upload(
-        data, filename, progress
+        data, filename, progress, page_sink=page_texts
     )
 
     with open(os.path.join(SOURCE_DIR, out_name), "wb") as f:
@@ -136,6 +152,9 @@ def add_to_knowledge(data: bytes, filename: str, progress=None) -> dict:
             f"No readable text found in {filename}. "
             "If it is a scanned PDF, it needs OCR first."
         )
+
+    if page_texts:
+        write_page_index(DOCS_DIR, name, page_texts)
 
     return {
         "saved_as": name + ".txt",
@@ -182,6 +201,7 @@ def remove_document(rel_name: str) -> bool:
     os.remove(target)
 
     stem = os.path.splitext(rel_name)[0]
+    remove_page_index(os.path.dirname(target), os.path.splitext(os.path.basename(target))[0])
     for ext in (".txt", ".md", ".pdf"):
         source = os.path.abspath(os.path.join(SOURCE_DIR, stem + ext))
         if source.startswith(os.path.abspath(SOURCE_DIR) + os.sep) and os.path.isfile(source):

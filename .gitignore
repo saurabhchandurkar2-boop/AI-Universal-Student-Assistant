@@ -31,3 +31,5 @@ project_structure.txt
 requirements-full.txt
 
 *.gguf
+
+user_data/

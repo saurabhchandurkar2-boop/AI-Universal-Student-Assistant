@@ -75,15 +75,35 @@ from knowledge_loader import (
     read_document,
     SUPPORTED
 )
+import exporters
+import flashcards
+import planner
+import progress
 import quiz
 import study_helper
 import wiki_search
+from datetime import date, timedelta
 
 if HOSTED:
     add_to_knowledge = workspace.add
     list_documents = workspace.list
     remove_document = workspace.remove
     read_document = workspace.read
+
+# Flashcards and quiz scores. On your own computer they are saved in the
+# "user_data" folder; the public demo keeps them only for the current session.
+if "deck" not in st.session_state:
+    st.session_state.deck = flashcards.Deck.from_list(
+        [] if HOSTED else progress.load("flashcards", [])
+    )
+    st.session_state.quiz_history = [] if HOSTED else progress.load("quiz_history", [])
+
+
+def save_study_data():
+    if not HOSTED:
+        progress.save("flashcards", st.session_state.deck.to_list())
+        progress.save("quiz_history", st.session_state.quiz_history)
+
 
 with st.sidebar:
 
@@ -222,14 +242,16 @@ render_hero(hosted=HOSTED)
 # TABS
 # ==================================================
 
-chat_tab, formulas_tab, marks_tab, notes_tab, quiz_tab, write_tab = st.tabs(
+(chat_tab, formulas_tab, marks_tab, notes_tab, quiz_tab,
+ write_tab, plan_tab) = st.tabs(
     [
         "💬 Chat",
         "🧮 Formulas",
         "📈 Marks",
-        "📝 Summarizer",
+        "📝 Summary",
         "🎯 Quiz",
-        "✍️ Write & learn"
+        "✍️ Write & learn",
+        "🗓 Plan"
     ]
 )
 
@@ -266,7 +288,8 @@ def render_meta(meta):
     elif sources and origin == "notes":
         with st.expander("📚 Notes used for this answer"):
             for source in sources:
-                st.markdown(f"**{source['filename']}**")
+                page = f"  ·  page {source['page']}" if source.get("page") else ""
+                st.markdown(f"**{source['filename']}**{page}")
                 st.caption(source["snippet"] + "…")
 
 
@@ -412,16 +435,34 @@ with chat_tab:
     # CLEAR CONVERSATION
     # --------------------------------------------------
 
-    if st.button(
-        "🗑️ Clear chat",
-        key="clear_chat"
-    ):
+    save_column, clear_column, _ = st.columns([1, 1, 2])
 
-        st.session_state.chat_history = []
+    with save_column:
 
-        bot.clear_conversation()
+        if st.session_state.chat_history:
 
-        st.rerun()
+            st.download_button(
+                "⬇️ Save chat",
+                data=exporters.chat_to_markdown(
+                    st.session_state.chat_history
+                ),
+                file_name="study_chat.md",
+                mime="text/markdown",
+                key="save_chat"
+            )
+
+    with clear_column:
+
+        if st.button(
+            "🗑️ Clear chat",
+            key="clear_chat"
+        ):
+
+            st.session_state.chat_history = []
+
+            bot.clear_conversation()
+
+            st.rerun()
 
 
 # ==================================================
@@ -836,6 +877,164 @@ with quiz_tab:
 
                         st.subheader(f"Score: {correct} / {len(gradable)}")
 
+                        # Keep a score history (once per quiz).
+                        if not state.get("recorded"):
+
+                            st.session_state.quiz_history = progress.record_quiz(
+                                st.session_state.quiz_history,
+                                state["doc"],
+                                correct,
+                                len(gradable)
+                            )
+
+                            state["recorded"] = True
+
+                            save_study_data()
+
+                action_save, action_download, _ = st.columns([1, 1, 2])
+
+                with action_save:
+
+                    if st.button("🃏 Save as flashcards", key="save_cards"):
+
+                        added = st.session_state.deck.add_questions(
+                            state["questions"],
+                            state["doc"]
+                        )
+
+                        save_study_data()
+
+                        if added:
+                            st.success(f"Added {added} new flashcard(s).", icon="🃏")
+                        else:
+                            st.info("These questions are already flashcards.", icon="ℹ️")
+
+                with action_download:
+
+                    st.download_button(
+                        "⬇️ Download quiz",
+                        data=exporters.quiz_to_text(
+                            state["questions"],
+                            state["doc"]
+                        ),
+                        file_name="quiz.txt",
+                        mime="text/plain",
+                        key="download_quiz"
+                    )
+
+    # --------------------------------------------------
+    # SCORES
+    # --------------------------------------------------
+
+    score_summary = progress.summary(st.session_state.quiz_history)
+
+    if score_summary["attempts"]:
+
+        st.divider()
+
+        st.subheader("📊 Your scores")
+
+        score_a, score_b, score_c = st.columns(3)
+
+        score_a.metric("Quizzes taken", score_summary["attempts"])
+        score_b.metric("Average", f"{score_summary['average']}%")
+        score_c.metric("Best", f"{score_summary['best']}%")
+
+        for item in reversed(score_summary["last"]):
+            st.caption(f"{item['doc']}  ·  {item['score']}  ({item['percent']}%)")
+
+    # --------------------------------------------------
+    # FLASHCARDS
+    # --------------------------------------------------
+
+    st.divider()
+
+    st.subheader("🃏 Flashcards")
+
+    deck = st.session_state.deck
+
+    if not deck.cards:
+
+        st.caption(
+            "No flashcards yet. Make a quiz above, then press "
+            "“🃏 Save as flashcards”. Cards you miss come back sooner."
+        )
+
+    else:
+
+        deck_stats = deck.stats()
+
+        card_a, card_b, card_c = st.columns(3)
+
+        card_a.metric("Cards", deck_stats["total"])
+        card_b.metric("Due now", deck_stats["due"])
+        card_c.metric("Learned", deck_stats["learned"])
+
+        card = deck.next_card()
+
+        if card is None:
+
+            st.success(
+                "All done for now. Next card "
+                f"{flashcards.describe_wait(deck.seconds_until_next())}.",
+                icon="🎉"
+            )
+
+        else:
+
+            st.markdown(f"**{card['front']}**")
+
+            if card["source"]:
+                st.caption(f"From {card['source']}")
+
+            if st.session_state.get("card_shown") == card["id"]:
+
+                st.info(card["back"], icon="💡")
+
+                know_column, miss_column = st.columns(2)
+
+                with know_column:
+
+                    if st.button("✅ I knew it", key="card_known"):
+
+                        deck.grade(card["id"], True)
+                        st.session_state.card_shown = None
+                        save_study_data()
+                        st.rerun()
+
+                with miss_column:
+
+                    if st.button("🔁 Not yet", key="card_missed"):
+
+                        deck.grade(card["id"], False)
+                        st.session_state.card_shown = None
+                        save_study_data()
+                        st.rerun()
+
+            else:
+
+                if st.button("👁 Show answer", key="card_show", type="primary"):
+
+                    st.session_state.card_shown = card["id"]
+                    st.rerun()
+
+        with st.expander("Manage flashcards"):
+
+            st.download_button(
+                "⬇️ Export cards (CSV, works with Anki)",
+                data=deck.to_csv(),
+                file_name="flashcards.csv",
+                mime="text/csv",
+                key="cards_csv"
+            )
+
+            if st.button("🗑️ Delete all flashcards", key="cards_clear"):
+
+                deck.clear()
+                st.session_state.card_shown = None
+                save_study_data()
+                st.rerun()
+
 
 # ==================================================
 # WRITE AND LEARN
@@ -1014,3 +1213,109 @@ with write_tab:
             file_name="study_helper.txt",
             key="write_download"
         )
+
+
+# ==================================================
+# STUDY PLANNER
+# ==================================================
+
+with plan_tab:
+
+    st.header("🗓 Study planner")
+
+    st.caption(
+        "Tell me your subjects and exam date and I will make a day-by-day plan. "
+        "Harder subjects get more time and the last day is for revision. "
+        "It works instantly and needs no AI."
+    )
+
+    plan_subjects = st.text_area(
+        "Subjects (one per line; add , hard or , easy if you like)",
+        key="plan_subjects",
+        height=130,
+        placeholder="Physics, hard\nMaths\nEnglish, easy"
+    )
+
+    plan_col_date, plan_col_hours, plan_col_rest = st.columns(3)
+
+    with plan_col_date:
+
+        plan_exam = st.date_input(
+            "Exam date",
+            value=date.today() + timedelta(days=14),
+            min_value=date.today() + timedelta(days=1),
+            key="plan_exam"
+        )
+
+    with plan_col_hours:
+
+        plan_hours = st.slider(
+            "Study hours per day",
+            0.5, 8.0, 2.0, 0.5,
+            key="plan_hours"
+        )
+
+    with plan_col_rest:
+
+        weekdays = [
+            "No rest day", "Monday", "Tuesday", "Wednesday",
+            "Thursday", "Friday", "Saturday", "Sunday"
+        ]
+
+        plan_rest = st.selectbox(
+            "Weekly rest day",
+            weekdays,
+            key="plan_rest"
+        )
+
+    if st.button("🗓 Make my plan", key="make_plan", type="primary"):
+
+        try:
+
+            st.session_state.plan = planner.make_plan(
+                planner.parse_subject_lines(plan_subjects),
+                plan_exam,
+                hours_per_day=plan_hours,
+                rest_weekday=(
+                    None if plan_rest == weekdays[0]
+                    else weekdays.index(plan_rest) - 1
+                )
+            )
+
+        except ValueError as error:
+
+            st.session_state.pop("plan", None)
+            st.error(str(error))
+
+    study_plan = st.session_state.get("plan")
+
+    if study_plan:
+
+        for warning in study_plan["warnings"]:
+            st.warning(warning, icon="⚠️")
+
+        st.subheader("Your plan")
+
+        st.markdown(planner.plan_to_markdown(study_plan, None))
+
+        plan_download_a, plan_download_b, _ = st.columns([1, 1, 2])
+
+        with plan_download_a:
+
+            st.download_button(
+                "⬇️ Download (text)",
+                data=planner.plan_to_markdown(study_plan),
+                file_name="study_plan.md",
+                mime="text/markdown",
+                key="plan_download_md"
+            )
+
+        with plan_download_b:
+
+            st.download_button(
+                "⬇️ Download (CSV)",
+                data=planner.plan_to_csv(study_plan),
+                file_name="study_plan.csv",
+                mime="text/csv",
+                key="plan_download_csv"
+            )

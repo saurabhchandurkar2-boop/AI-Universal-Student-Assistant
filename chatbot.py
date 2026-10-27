@@ -29,6 +29,7 @@ import time
 from ai_engine import AIEngine
 from ai_router import AIRouter
 from accuracy import AccuracyLayer
+from chunk_filter import filter_results, page_of
 from quality_control import QualityController
 from knowledge.retriever import KnowledgeRetriever
 from tavily_web_search import TavilyWebSearch
@@ -272,6 +273,9 @@ class StudentChatbot:
                 top_k=self.RAG_TOP_K
             )
 
+            # Drop covers, copyright pages and tables of contents.
+            results = filter_results(results)
+
             # Remember which documents were used (shown under the answer).
             if isinstance(results, list):
 
@@ -290,12 +294,17 @@ class StudentChatbot:
 
                     seen.add(name)
 
-                    self.last_sources.append(
-                        {
-                            "filename": name,
-                            "snippet": " ".join(text.split())[:220],
-                        }
-                    )
+                    source = {
+                        "filename": name,
+                        "snippet": " ".join(text.split())[:220],
+                    }
+
+                    page = page_of(item.get("path"), text)
+
+                    if page:
+                        source["page"] = page
+
+                    self.last_sources.append(source)
 
             elapsed = (
                 time.time() - start

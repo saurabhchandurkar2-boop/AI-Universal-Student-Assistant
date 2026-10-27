@@ -24,6 +24,7 @@ import requests
 from ai_engine import AIEngine
 from knowledge.retriever import KnowledgeRetriever
 import knowledge_loader as kl
+from chunk_filter import remove_page_index, write_page_index
 
 MAX_UPLOAD_MB = 50
 MAX_DOCS_PER_VISITOR = 20
@@ -115,7 +116,8 @@ class HostedAIEngine(AIEngine):
                         "Wait a minute and try again.")
             if "API key" in detail or "API_KEY" in detail or "400" in detail or "403" in detail:
                 return "Gemini rejected the key. Check that you pasted it correctly."
-            return ("Gemini could not answer right now (" + detail[:200] + "). Please try again.")
+            return ("Gemini could not answer right now (" + detail[:200]
+                    + "). Please try again.")
         return answer
 
     def simple_ask(self, system: str, user: str, max_tokens: int = 300) -> str:
@@ -162,10 +164,15 @@ class Workspace:
             raise ValueError(f"File is larger than {MAX_UPLOAD_MB} MB (limit on the free host).")
         if len(self.list()) >= MAX_DOCS_PER_VISITOR:
             raise ValueError(f"Limit of {MAX_DOCS_PER_VISITOR} documents reached. Remove one first.")
-        name, out_name, payload, pages, warning = kl.convert_upload(data, filename, progress)
+        page_texts = []
+        name, out_name, payload, pages, warning = kl.convert_upload(
+            data, filename, progress, page_sink=page_texts
+        )
         txt_name = name + ".txt"
         with open(os.path.join(self.dir, txt_name), "wb") as f:
             f.write(payload)
+        if page_texts:
+            write_page_index(self.dir, name, page_texts)
         return {"saved_as": txt_name, "index_success": True,
                 "pages": pages, "warning": warning}
 
@@ -186,6 +193,7 @@ class Workspace:
         if not os.path.isfile(target):
             return False
         os.remove(target)
+        remove_page_index(os.path.dirname(target), os.path.splitext(os.path.basename(target))[0])
         return True
 
 

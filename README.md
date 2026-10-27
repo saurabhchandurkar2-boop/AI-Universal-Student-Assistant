@@ -110,6 +110,17 @@ $env:TAVILY_API_KEY="your-key"
 streamlit run app.py
 ```
 
+## Study tools
+
+- **Flashcards:** save a quiz as flashcards. Cards you miss come back sooner. Export to CSV for Anki.
+- **Score history:** see your quiz results over time.
+- **Study planner:** type your subjects and exam date to get a day-by-day timetable.
+- **Save chat and download quiz:** keep your work as text files.
+- **Cleaner PDF answers:** cover and contents pages are skipped, and sources show the PDF page number (for PDFs added from now on).
+
+Flashcards and scores are saved in a `user_data` folder on your own computer. The online demo keeps them only for the visit.
+
+For a full explanation, including when an API key is needed, see the [project guide](docs/AI_Student_Assistant_Guide.docx).
 ## Free public demo
 
 **Live demo:** https://ai-universal-student-assistant-9rutqh5gsjhybrramaqgvf.streamlit.app/
