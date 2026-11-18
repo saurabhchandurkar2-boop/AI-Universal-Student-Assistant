@@ -199,3 +199,10 @@ under the Creative Commons Attribution-ShareAlike license.
 
 The interface uses the Inter and Poppins fonts, bundled under the SIL Open Font
 License 1.1 (see `static/fonts/FONT-LICENSES.txt`).
+
+## What's new in v9
+
+- **Streaming answers:** with the local model, the answer appears word by word.
+- **Search by meaning (optional):** finds notes even when the words differ. Install with `pip install -r requirements-meaning.txt`, then check it with `python semantic_check.py`. The public demo uses word search.
+- **Start-here box:** explains where answers come from and how to connect a key.
+- **Optional keys box** in local mode, and a fix for answers that were cut off at the length limit.
