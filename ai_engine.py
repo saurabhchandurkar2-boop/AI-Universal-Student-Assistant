@@ -71,6 +71,8 @@ class AIEngine:
         self.local_calculation_tokens = 200
         self.local_default_tokens = 144
         self.local_detail_tokens = 256
+        # v9.1: "how / why / describe" questions need room to finish.
+        self.local_explain_tokens = 224
 
         # Dedicated token budget for complete list/application
         # answers.
@@ -837,6 +839,21 @@ class AIEngine:
             return self.local_technical_tokens
 
         # ----------------------------------------------------
+        # 5b. How / why / describe questions (v9.1)
+        # ----------------------------------------------------
+
+        if re.search(
+            r"^(how|why)\b|\b(describe|what happens)\b",
+            q
+        ):
+
+            print(
+                "[AI Engine] Token class: explain"
+            )
+
+            return self.local_explain_tokens
+
+        # ----------------------------------------------------
         # 6. Simple factual
         # ----------------------------------------------------
 
@@ -1258,6 +1275,23 @@ class AIEngine:
 
                 return True
 
+            # v9.1: a cut-off bold marker, or a list item that has
+            # only a word or two, such as "3. **Oxygen".
+
+            if text.count("**") % 2 == 1:
+
+                return True
+
+            last_line = text.splitlines()[-1].strip()
+
+            if (
+                re.match(r"^(\d+[.)]|[-*\u2022])\s+", last_line)
+                and len(last_line.split()) <= 4
+                and not last_line.endswith((".", "!", "?", ")"))
+            ):
+
+                return True
+
             # Detect a substantial final sentence that was
             # likely cut off by the token limit.
 
@@ -1325,10 +1359,65 @@ class AIEngine:
     # LOCAL QWEN GENERATION
     # ========================================================
 
+    def has_key(self):
+        """True when a Gemini client is available."""
+
+        return self.gemini_client is not None
+
+    def set_gemini_key(self, key):
+        """Use a Gemini key typed into the app for this session only.
+
+        An empty key keeps whatever key came from the environment.
+        """
+
+        key = (key or "").strip()
+
+        if not key:
+
+            return self.gemini_client is not None
+
+        if key == getattr(self, "_session_key", None) and self.gemini_client:
+
+            return True
+
+        try:
+
+            from google import genai
+
+            self.gemini_client = genai.Client(api_key=key)
+            self._session_key = key
+
+            return True
+
+        except Exception as error:
+
+            print("[Gemini] Could not use the typed key:", error)
+
+            return False
+
+    @staticmethod
+    def _join_parts(first, second):
+        """Join an answer with its continuation."""
+
+        first = first or ""
+        second = second or ""
+
+        if not first:
+            return second
+
+        if not second:
+            return first
+
+        if first.endswith(("\n", " ")) or second[0] in ".,;:!?)]\n":
+            return first.rstrip(" ") + second
+
+        return first + " " + second
+
     def _read_local_response(
         self,
         response,
-        stream_callback=None
+        stream_callback=None,
+        prefix=""
     ):
         """Return the llama-server reply as a normal (non-streaming) dict.
 
@@ -1344,7 +1433,8 @@ class AIEngine:
         text = ""
         finish_reason = None
 
-        self._send_stream(stream_callback, "")
+        # prefix = the part already written before a retry continues it.
+        self._send_stream(stream_callback, prefix)
 
         for raw in response.iter_lines():
 
@@ -1386,7 +1476,7 @@ class AIEngine:
 
                     self._send_stream(
                         stream_callback,
-                        text
+                        self._join_parts(prefix, text)
                     )
 
                 if choice.get("finish_reason"):
@@ -1450,6 +1540,9 @@ class AIEngine:
 
         current_max_tokens = max_tokens
 
+        # Part of the answer written before a retry continued it.
+        carried = ""
+
         for attempt in range(
             self.local_max_attempts
         ):
@@ -1490,7 +1583,8 @@ class AIEngine:
 
                 data = self._read_local_response(
                     response,
-                    stream_callback
+                    stream_callback,
+                    carried
                 )
 
                 elapsed = (
@@ -1619,6 +1713,11 @@ class AIEngine:
 
                         current_max_tokens = retry_tokens
 
+                        carried = self._join_parts(
+                            carried,
+                            answer
+                        )
+
                         continue
 
                     print(
@@ -1636,7 +1735,10 @@ class AIEngine:
                     "Response appears complete."
                 )
 
-                return answer
+                return self._join_parts(
+                    carried,
+                    answer
+                )
 
             except Exception as e:
 

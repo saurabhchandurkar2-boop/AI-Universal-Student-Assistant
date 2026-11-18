@@ -268,6 +268,120 @@ def test_ask_with_info_passes_the_callback_and_always_clears_it():
     assert bot.ai_engine.stream_callback is None
 
 
+# ---------------------------------------------------------------- v9.1
+
+def test_cut_off_list_item_is_detected_but_complete_answers_are_not():
+    from ai_engine import AIEngine
+
+    engine = AIEngine()
+    engine._current_messages = MESSAGES
+    cut = "Plants make food in two steps.\n1. Light reactions split water.\n2. The Calvin cycle makes glucose.\n3. **Oxygen"
+    assert engine.looks_truncated(cut, "length") is True
+    assert engine.looks_truncated("The answer is **glucose", "length") is True       # unclosed bold
+    done = "Plants make glucose from carbon dioxide and water using light energy."
+    assert engine.looks_truncated(done, "length") is False
+    assert engine.looks_truncated(done + "\n3. Oxygen is released.", "length") is False
+    assert engine.looks_truncated(cut, "stop") is False                               # normal finishes untouched
+
+
+def test_join_parts():
+    from ai_engine import AIEngine
+
+    join = AIEngine._join_parts
+    assert join("", "b") == "b" and join("a", "") == "a"
+    assert join("It makes", "glucose.") == "It makes glucose."
+    assert join("It makes glucose", ".") == "It makes glucose."
+    assert join("Line one\n", "Line two") == "Line one\nLine two"
+
+
+def test_more_room_for_how_and_why_questions():
+    from ai_engine import AIEngine
+
+    engine = AIEngine()
+    assert engine.select_local_tokens("how does photosynthesis work") == engine.local_explain_tokens == 224
+    assert engine.select_local_tokens("why is the sky blue") == 224
+    assert engine.select_local_tokens("what is photosynthesis?") == engine.local_short_tokens
+    assert engine.select_local_tokens("explain ohm's law") == engine.local_technical_tokens
+
+
+class FakeLlamaCutOff(BaseHTTPRequestHandler):
+    """First reply is cut off by the length limit, the second one finishes the answer."""
+
+    replies = [("Photosynthesis has two stages.\n1. Light reactions.\n2. Calvin cycle.\n3. **Oxygen", "length"),
+               ("is released as a by-product.", "stop")]
+    count = 0
+
+    def log_message(self, *args):
+        pass
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        text, reason = self.replies[min(type(self).count, len(self.replies) - 1)]
+        type(self).count += 1
+        self.send_response(200)
+        if body.get("stream"):
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for word in text.split(" "):
+                event = {"choices": [{"delta": {"content": word + " "}, "finish_reason": None}]}
+                self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
+            last = {"choices": [{"delta": {}, "finish_reason": reason}]}
+            self.wfile.write(("data: " + json.dumps(last) + "\n\ndata: [DONE]\n\n").encode())
+        else:
+            data = json.dumps({"choices": [{"message": {"content": text}, "finish_reason": reason}]}).encode()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+
+def _cutoff_run(stream):
+    FakeLlamaCutOff.count = 0
+    server = HTTPServer(("127.0.0.1", 0), FakeLlamaCutOff)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        engine = _engine(server)
+        seen = []
+        engine.stream_callback = seen.append if stream else None
+        return engine.generate_local(MESSAGES), seen
+    finally:
+        server.shutdown()
+
+
+def test_a_cut_off_answer_is_continued_and_joined_not_replaced():
+    answer, _ = _cutoff_run(stream=False)
+    assert answer.startswith("Photosynthesis has two stages.")
+    assert answer.endswith("**Oxygen is released as a by-product.")
+    assert answer.count("Photosynthesis has two stages.") == 1
+
+
+def test_streaming_keeps_the_first_part_visible_during_the_retry():
+    answer, seen = _cutoff_run(stream=True)
+    assert answer.endswith("**Oxygen is released as a by-product.")
+    shown = [t for t in seen if t]
+    assert shown[-1].strip() == answer
+    # while the continuation arrives the earlier text must still be on screen
+    assert any(t.startswith("Photosynthesis has two stages.") and "is released" in t for t in shown)
+
+
+def test_typed_gemini_key_is_session_only_and_empty_keeps_environment_key():
+    from ai_engine import AIEngine
+
+    engine = AIEngine()
+    sentinel = object()
+    engine.gemini_client = sentinel
+    assert engine.has_key() is True
+    assert engine.set_gemini_key("") is True and engine.gemini_client is sentinel
+    assert engine.set_gemini_key("   ") is True and engine.gemini_client is sentinel
+    try:
+        import google.genai  # noqa: F401
+    except ImportError:
+        return
+    assert engine.set_gemini_key("typed-test-key") is True
+    assert engine.gemini_client is not sentinel and engine.has_key()
+    assert engine.set_gemini_key("typed-test-key") is True
+
+
 if __name__ == "__main__":
     test_index_finds_meaning_and_applies_threshold()
     test_cache_means_each_text_is_embedded_once()
@@ -278,4 +392,10 @@ if __name__ == "__main__":
     test_streaming_sends_growing_text_and_returns_the_same_answer()
     test_a_broken_display_callback_never_breaks_the_answer()
     test_ask_with_info_passes_the_callback_and_always_clears_it()
+    test_cut_off_list_item_is_detected_but_complete_answers_are_not()
+    test_join_parts()
+    test_more_room_for_how_and_why_questions()
+    test_a_cut_off_answer_is_continued_and_joined_not_replaced()
+    test_streaming_keeps_the_first_part_visible_during_the_retry()
+    test_typed_gemini_key_is_session_only_and_empty_keeps_environment_key()
     print("All v9 tests passed.")

@@ -137,6 +137,31 @@ with st.sidebar:
             icon="🔒"
         )
 
+    else:
+
+        with st.expander("🔑 Optional keys (Gemini, web search)"):
+
+            st.caption(
+                "The local model needs no key. Add a free Gemini key for better "
+                "answers outside your notes, and a Tavily key for web search. "
+                "Keys stay in this session only and are never saved."
+            )
+
+            local_gemini = st.text_input(
+                "Gemini API key", type="password", key="local_gemini_key"
+            )
+            local_tavily = st.text_input(
+                "Tavily key (optional)", type="password", key="local_tavily_key"
+            )
+
+            bot.ai_engine.set_gemini_key(local_gemini)
+
+            if (local_tavily or "").strip():
+                bot.web_search.api_key = local_tavily.strip()
+
+            if bot.ai_engine.has_key():
+                st.success("Gemini connected")
+
     st.header("📂 Knowledge base")
 
     uploaded_files = st.file_uploader(
