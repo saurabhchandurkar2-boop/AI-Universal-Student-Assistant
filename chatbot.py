@@ -304,6 +304,9 @@ class StudentChatbot:
                     if page:
                         source["page"] = page
 
+                    if "meaning" in str(item.get("via") or ""):
+                        source["match"] = "meaning"
+
                     self.last_sources.append(source)
 
             elapsed = (
@@ -1609,7 +1612,8 @@ class StudentChatbot:
 
     def ask_with_info(
         self,
-        question
+        question,
+        stream_callback=None
     ):
         """Return {"answer", "seconds", "sources", "origin"}.
 
@@ -1623,7 +1627,17 @@ class StudentChatbot:
 
         start = time.time()
 
-        answer = self.ask(question)
+        # With a callback, the local model sends its answer piece by piece
+        # (the callback gets the text written so far).
+        self.ai_engine.stream_callback = stream_callback
+
+        try:
+
+            answer = self.ask(question)
+
+        finally:
+
+            self.ai_engine.stream_callback = None
 
         seconds = time.time() - start
 

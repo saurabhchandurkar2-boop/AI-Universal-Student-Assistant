@@ -2,6 +2,8 @@ import os
 import re
 from collections import Counter
 
+import semantic
+
 
 class KnowledgeRetriever:
     """
@@ -28,13 +30,29 @@ class KnowledgeRetriever:
 
         self.min_score = 0.05
 
+        # Optional search by meaning (see semantic.py). Off unless fastembed is
+        # installed; any problem switches it off and word search carries on.
+        self.semantic = None
+        self.semantic_error = ""
+        self._semantic_ready = False
+        self.semantic_min_sim = float(os.getenv("SEMANTIC_MIN_SIM", "0.60"))
+        self.semantic_margin = 0.10
+        # A match found only by meaning starts just above the chatbot's
+        # "good enough" line (1.5) and rises with the similarity.
+        self.semantic_base_score = 1.6
+
         self.refresh_cache()
+
+        if semantic.wanted() and semantic.package_installed():
+            self.enable_semantic()
 
     # ---------------------------------------------------------
     # CACHE
     # ---------------------------------------------------------
 
     def refresh_cache(self):
+
+        self._semantic_ready = False
 
         self.documents = []
         self.chunks = []
@@ -864,6 +882,96 @@ class KnowledgeRetriever:
         return final_score
 
     # ---------------------------------------------------------
+    # SEARCH BY MEANING (optional)
+    # ---------------------------------------------------------
+
+    def enable_semantic(self, embedder=None, cache_path="auto"):
+        """Turn on search by meaning. Returns True when it is on."""
+
+        try:
+
+            if cache_path == "auto":
+
+                folder = os.path.dirname(
+                    os.path.normpath(self.knowledge_path)
+                )
+
+                cache_path = (
+                    os.path.join(folder, "semantic_cache.json")
+                    if os.path.basename(
+                        os.path.normpath(self.knowledge_path)
+                    ) == "documents"
+                    else None
+                )
+
+            self.semantic = semantic.SemanticIndex(
+                embedder=embedder,
+                cache_path=cache_path
+            )
+
+            self.semantic_error = ""
+            self._semantic_ready = False
+
+            return True
+
+        except Exception as error:
+
+            self._disable_semantic(error)
+
+            return False
+
+    def _disable_semantic(self, error):
+
+        self.semantic = None
+        self._semantic_ready = False
+        self.semantic_error = str(error)[:200]
+
+        print("[Semantic] Switched off:", self.semantic_error)
+
+    def semantic_status(self):
+        """'on', 'off' or 'error: ...' for the sidebar."""
+
+        if self.semantic is not None:
+            return "on"
+
+        if self.semantic_error:
+            return "error: " + self.semantic_error
+
+        return "off"
+
+    def _ensure_semantic(self):
+
+        if self.semantic is None:
+            return False
+
+        if self._semantic_ready:
+            return True
+
+        try:
+
+            self.semantic.build(
+                [chunk["text"] for chunk in self.chunks]
+            )
+
+            self._semantic_ready = True
+
+            print(
+                "[Semantic] Index ready:",
+                len(self.chunks),
+                "chunk(s),",
+                self.semantic.embedded_now,
+                "newly embedded."
+            )
+
+            return True
+
+        except Exception as error:
+
+            self._disable_semantic(error)
+
+            return False
+
+    # ---------------------------------------------------------
     # SEARCH
     # ---------------------------------------------------------
 
@@ -879,7 +987,7 @@ class KnowledgeRetriever:
 
         results = []
 
-        for chunk in self.chunks:
+        for index, chunk in enumerate(self.chunks):
 
             score = self.score_chunk(
                 question,
@@ -893,9 +1001,16 @@ class KnowledgeRetriever:
                         "text": chunk["text"],
                         "filename": chunk["filename"],
                         "path": chunk["path"],
-                        "score": score
+                        "score": score,
+                        "chunk_index": index
                     }
                 )
+
+        results = self._add_meaning_matches(
+            question,
+            results,
+            top_k
+        )
 
         results.sort(
             key=lambda item: item["score"],
@@ -903,6 +1018,65 @@ class KnowledgeRetriever:
         )
 
         return results[:top_k]
+
+    def _add_meaning_matches(
+        self,
+        question,
+        results,
+        top_k
+    ):
+        """Boost word matches that also match in meaning, and add notes
+        that match only in meaning. Does nothing when meaning search is off."""
+
+        if not self._ensure_semantic():
+
+            return results
+
+        try:
+
+            hits = self.semantic.search(
+                question,
+                top_k=top_k + 2,
+                min_sim=self.semantic_min_sim,
+                margin=self.semantic_margin
+            )
+
+        except Exception as error:
+
+            self._disable_semantic(error)
+
+            return results
+
+        by_index = {
+            item["chunk_index"]: item
+            for item in results
+        }
+
+        for index, sim in hits:
+
+            bonus = (sim - self.semantic_min_sim) * 10
+
+            if index in by_index:
+
+                by_index[index]["score"] += bonus
+                by_index[index]["via"] = "words+meaning"
+
+            else:
+
+                chunk = self.chunks[index]
+
+                results.append(
+                    {
+                        "text": chunk["text"],
+                        "filename": chunk["filename"],
+                        "path": chunk["path"],
+                        "score": self.semantic_base_score + bonus,
+                        "chunk_index": index,
+                        "via": "meaning"
+                    }
+                )
+
+        return results
 
     # ---------------------------------------------------------
     # BUILD CONTEXT

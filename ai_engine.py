@@ -36,6 +36,7 @@
 # - Gemini error propagation preserved for fallback handling
 # ============================================================
 
+import json
 import os
 import re
 import time
@@ -1324,6 +1325,95 @@ class AIEngine:
     # LOCAL QWEN GENERATION
     # ========================================================
 
+    def _read_local_response(
+        self,
+        response,
+        stream_callback=None
+    ):
+        """Return the llama-server reply as a normal (non-streaming) dict.
+
+        When stream_callback is set the reply arrives piece by piece; the
+        callback is called with the text written so far, and the pieces are
+        joined into the same structure a normal reply has.
+        """
+
+        if not stream_callback:
+
+            return response.json()
+
+        text = ""
+        finish_reason = None
+
+        self._send_stream(stream_callback, "")
+
+        for raw in response.iter_lines():
+
+            if not raw:
+                continue
+
+            line = (
+                raw.decode("utf-8", "replace")
+                if isinstance(raw, bytes)
+                else raw
+            ).strip()
+
+            if not line.startswith("data:"):
+                continue
+
+            body = line[5:].strip()
+
+            if body == "[DONE]":
+                break
+
+            try:
+
+                chunk = json.loads(body)
+
+            except ValueError:
+
+                continue
+
+            for choice in chunk.get("choices") or []:
+
+                piece = (
+                    (choice.get("delta") or {}).get("content")
+                    or ""
+                )
+
+                if piece:
+
+                    text += piece
+
+                    self._send_stream(
+                        stream_callback,
+                        text
+                    )
+
+                if choice.get("finish_reason"):
+
+                    finish_reason = choice["finish_reason"]
+
+        return {
+            "choices": [
+                {
+                    "message": {"content": text},
+                    "finish_reason": finish_reason,
+                }
+            ]
+        }
+
+    @staticmethod
+    def _send_stream(stream_callback, text):
+        """Never let a display problem break answer generation."""
+
+        try:
+
+            stream_callback(text)
+
+        except Exception:
+
+            pass
+
     def generate_local(
         self,
         messages,
@@ -1364,6 +1454,12 @@ class AIEngine:
             self.local_max_attempts
         ):
 
+            stream_callback = getattr(
+                self,
+                "stream_callback",
+                None
+            )
+
             payload = {
 
                 "messages":
@@ -1376,7 +1472,7 @@ class AIEngine:
                     current_max_tokens,
 
                 "stream":
-                    False,
+                    bool(stream_callback),
             }
 
             start_time = time.time()
@@ -1386,7 +1482,15 @@ class AIEngine:
                 response = requests.post(
                     self.local_url,
                     json=payload,
-                    timeout=120
+                    timeout=120,
+                    stream=bool(stream_callback)
+                )
+
+                response.raise_for_status()
+
+                data = self._read_local_response(
+                    response,
+                    stream_callback
                 )
 
                 elapsed = (
@@ -1398,10 +1502,6 @@ class AIEngine:
                     f"[AI Engine] Local Qwen: "
                     f"{elapsed:.2f}s"
                 )
-
-                response.raise_for_status()
-
-                data = response.json()
 
                 choices = data.get(
                     "choices",

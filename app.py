@@ -198,6 +198,17 @@ with st.sidebar:
 
     st.caption(f"{len(documents)} document(s) in the knowledge base")
 
+    meaning_status = bot.knowledge.semantic_status()
+
+    if meaning_status == "on":
+        st.caption("🔎 Meaning search: on")
+    elif meaning_status.startswith("error"):
+        st.caption("🔎 Meaning search: switched off after a problem (word search is used)")
+    elif HOSTED:
+        st.caption("🔎 Search: by words")
+    else:
+        st.caption("🔎 Search: by words. For search by meaning run: pip install fastembed")
+
     with st.expander("📄 Show documents"):
 
         for doc_name in documents:
@@ -289,7 +300,8 @@ def render_meta(meta):
         with st.expander("📚 Notes used for this answer"):
             for source in sources:
                 page = f"  ·  page {source['page']}" if source.get("page") else ""
-                st.markdown(f"**{source['filename']}**{page}")
+                meaning = "  ·  🔎 found by meaning" if source.get("match") == "meaning" else ""
+                st.markdown(f"**{source['filename']}**{page}{meaning}")
                 st.caption(source["snippet"] + "…")
 
 
@@ -318,6 +330,38 @@ with chat_tab:
         with st.chat_message(message["role"]):
             st.write(message["content"])
             render_meta(message.get("meta"))
+
+
+    # --------------------------------------------------
+    # START HERE (only while the chat is empty)
+    # --------------------------------------------------
+
+    if not st.session_state.chat_history:
+
+        with st.expander("👋 Start here", expanded=True):
+
+            if HOSTED and not bot.ai_engine.has_key():
+                st.warning(
+                    "To get AI answers, paste a free Gemini key in the sidebar "
+                    "under **Connect your own keys**. Quiz, flashcards, formulas "
+                    "and the study planner work without any key.",
+                    icon="🔑"
+                )
+            elif HOSTED:
+                st.success("Gemini is connected. Ask your first question below.", icon="✅")
+            else:
+                st.success("The local model is running on your computer.", icon="✅")
+
+            st.markdown(
+                "**Where answers come from**\n"
+                "1. 📚 **Your notes**: upload PDF, Word or text files in the sidebar.\n"
+                "2. 📖 **Wikipedia**: used when your notes have no good match.\n"
+                "3. 🤖 **The AI**: writes the final answer from what was found.\n\n"
+                "**Try asking**\n"
+                "- What is photosynthesis?\n"
+                "- Explain Ohm's law\n"
+                "- What is 15% of 240?"
+            )
 
 
     # --------------------------------------------------
@@ -376,6 +420,13 @@ with chat_tab:
 
         with st.chat_message("assistant"):
 
+            # The local model shows its answer as it is written.
+            stream_box = st.empty()
+
+            def show_stream(text):
+                if text:
+                    stream_box.markdown(text + " ▌")
+
             with st.spinner("Thinking..."):
 
                 try:
@@ -394,7 +445,10 @@ with chat_tab:
                             "sources": [],
                         }
                     else:
-                        info = bot.ask_with_info(user_message)
+                        info = bot.ask_with_info(
+                            user_message,
+                            stream_callback=None if HOSTED else show_stream
+                        )
                         response = info["answer"]
                         meta = info
 
@@ -410,6 +464,7 @@ with chat_tab:
                             "Start it and ask again."
                         )
 
+                    stream_box.empty()
                     st.write(response)
                     render_meta(meta)
 

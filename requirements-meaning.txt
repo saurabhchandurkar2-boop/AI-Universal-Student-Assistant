@@ -1,0 +1,4 @@
+# Optional: search your notes by meaning (about 80 MB model, runs on the CPU).
+# Install on your own computer with:  pip install -r requirements-meaning.txt
+# Not needed for the public demo. Without it the app uses word search.
+fastembed

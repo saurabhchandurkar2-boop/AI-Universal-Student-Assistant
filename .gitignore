@@ -33,3 +33,4 @@ requirements-full.txt
 *.gguf
 
 user_data/
+knowledge/semantic_cache.json
